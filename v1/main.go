@@ -11,25 +11,24 @@ import (
 
 // Analytics struct to store information about moved files and directories
 type Analytics struct {
-	totalFilesMoved       int                 // Total number of files moved
-	totalSizeMoved        int64               // Total size of files moved in bytes
-	totalEmptyFolders     int                 // Total empty folders removed
-	sortedFolders         int                 // Number of folders sorted
-	skippedFolders        int                 // Number of folders skipped
-	categoryStats         map[string]Category // Stats per category
-	largestFile           string              // Name of the largest file moved
-	largestFileSize       int64               // Size of the largest file moved in bytes
+	totalFilesMoved   int
+	totalSizeMoved    int64
+	totalEmptyFolders int
+	sortedFolders     int
+	skippedFolders    int
+	categoryStats     map[string]Category
+	largestFile       string
+	largestFileSize   int64
 }
 
 // Category struct to store stats for each category
 type Category struct {
-	count int   // Number of files in this category
-	size  int64 // Total size of files in this category
+	count int
+	size  int64
 }
 
 // checkArgs checks if a folder path is provided as a command-line argument
 func checkArgs(args []string) bool {
-	log.Println(args)
 	return len(args) == 1
 }
 
@@ -64,6 +63,117 @@ func confirm(prompt string) bool {
 	return response == "y"
 }
 
+// handleDirectory prompts to sort the contents of the directory
+func handleDirectory(path string, analytics *Analytics) bool {
+	if confirm(fmt.Sprintf("Do you want to sort files in the folder: %s?", path)) {
+		analytics.sortedFolders++
+		return true
+	} else {
+		analytics.skippedFolders++
+		return false
+	}
+}
+
+// processFile processes and moves a single file to its categorized location
+func processFile(path string, d os.DirEntry, folderPath string, analytics *Analytics) {
+	ext := filepath.Ext(d.Name())
+	category := categorizeFile(ext)
+
+	if category != "" {
+		categoryFolder := filepath.Join(folderPath, category)
+		createFolderIfNotExists(categoryFolder)
+
+		extensionFolder := filepath.Join(categoryFolder, strings.ToLower(ext)[1:])
+		createFolderIfNotExists(extensionFolder)
+
+		newPath := filepath.Join(extensionFolder, d.Name())
+
+		fileInfo, err := d.Info()
+		if err != nil {
+			log.Printf("Failed to get file info for %s: %v\n", path, err)
+			return
+		}
+
+		// Move the file
+		if err := os.Rename(path, newPath); err != nil {
+			log.Printf("Failed to move file %s to %s: %v\n", path, newPath, err)
+			return
+		}
+
+		// Update analytics
+		updateAnalytics(analytics, category, fileInfo.Size(), d.Name())
+	}
+}
+
+// createFolderIfNotExists creates a folder if it does not exist
+func createFolderIfNotExists(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.Mkdir(path, 0755); err != nil {
+			log.Printf("Failed to create directory %s: %v\n", path, err)
+		}
+	}
+}
+
+// updateAnalytics updates the analytics data
+func updateAnalytics(analytics *Analytics, category string, fileSize int64, fileName string) {
+	analytics.totalFilesMoved++
+	analytics.totalSizeMoved += fileSize
+
+	catStats := analytics.categoryStats[category]
+	catStats.count++
+	catStats.size += fileSize
+	analytics.categoryStats[category] = catStats
+
+	if fileSize > analytics.largestFileSize {
+		analytics.largestFileSize = fileSize
+		analytics.largestFile = fileName
+	}
+}
+
+// deleteEmptyFolders deletes empty folders and updates analytics
+func deleteEmptyFolders(folderPath string, analytics *Analytics) {
+	err := filepath.WalkDir(folderPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && path != folderPath {
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return err
+			}
+			if len(entries) == 0 {
+				if err := os.Remove(path); err != nil {
+					log.Printf("Failed to remove empty directory %s: %v\n", path, err)
+				} else {
+					analytics.totalEmptyFolders++
+					fmt.Printf("Deleted empty folder: %s\n", path)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Println("Error deleting empty folders:", err)
+	}
+}
+
+// printAnalytics prints the summary of the sorting operation
+func printAnalytics(analytics Analytics) {
+	fmt.Println("\n--- Analytics Summary ---")
+	fmt.Printf("Total files moved: %d\n", analytics.totalFilesMoved)
+	fmt.Printf("Total size moved: %.2f MB\n", float64(analytics.totalSizeMoved)/(1024*1024))
+	fmt.Printf("Largest file: %s (%.2f MB)\n", analytics.largestFile, float64(analytics.largestFileSize)/(1024*1024))
+	fmt.Printf("Total empty folders removed: %d\n", analytics.totalEmptyFolders)
+	fmt.Printf("Folders sorted: %d\n", analytics.sortedFolders)
+	fmt.Printf("Folders skipped: %d\n", analytics.skippedFolders)
+
+	fmt.Println("\nFiles moved by category:")
+	for category, stats := range analytics.categoryStats {
+		fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.count, float64(stats.size)/(1024*1024))
+	}
+}
+
 func main() {
 	var folderPath string
 	analytics := Analytics{categoryStats: make(map[string]Category)}
@@ -78,130 +188,34 @@ func main() {
 
 	log.Println("Path:", folderPath)
 
-	// Traverse all files and folders in the specified directory using WalkDir
+	// Traverse and sort files
 	err := filepath.WalkDir(folderPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// If the entry is a directory, prompt to sort contents and handle empty folders
+		// If directory, confirm sorting and skip if not confirmed
 		if d.IsDir() && path != folderPath {
-			if confirm(fmt.Sprintf("Do you want to sort files in the folder: %s?", path)) {
-				analytics.sortedFolders++
-			} else {
-				analytics.skippedFolders++
-				return filepath.SkipDir // Skip this directory
+			if !handleDirectory(path, &analytics) {
+				return filepath.SkipDir
 			}
 		}
 
-		// Process files within the folder
+		// If file, process it
 		if !d.IsDir() {
-			ext := filepath.Ext(d.Name())
-			category := categorizeFile(ext)
-
-			// If the file has a recognized category
-			if category != "" {
-				// Create the category folder path
-				categoryFolder := filepath.Join(folderPath, category)
-
-				// Create the folder if it doesn't exist
-				if _, err := os.Stat(categoryFolder); os.IsNotExist(err) {
-					err := os.Mkdir(categoryFolder, 0755)
-					if err != nil {
-						return fmt.Errorf("failed to create directory %s: %v", categoryFolder, err)
-					}
-				}
-
-				// Create the extension folder path
-				categoryExtensionFolder := filepath.Join(categoryFolder, strings.ToLower(ext)[1:])
-
-				// Create the folder if it doesn't exist
-				if _, err := os.Stat(categoryExtensionFolder); os.IsNotExist(err) {
-					err := os.Mkdir(categoryExtensionFolder, 0755)
-					if err != nil {
-						return fmt.Errorf("failed to create directory %s: %v", categoryExtensionFolder, err)
-					}
-				}
-
-				// Define the new path for the file
-				newPath := filepath.Join(categoryExtensionFolder, d.Name())
-
-				// Get file information to calculate size
-				fileInfo, err := d.Info()
-				if err != nil {
-					return fmt.Errorf("failed to get file info for %s: %v", path, err)
-				}
-				fileSize := fileInfo.Size()
-
-				// Update analytics data
-				analytics.totalFilesMoved++
-				analytics.totalSizeMoved += fileSize
-
-				// Update category statistics
-				catStats := analytics.categoryStats[category]
-				catStats.count++
-				catStats.size += fileSize
-				analytics.categoryStats[category] = catStats
-
-				// Check if this file is the largest file encountered
-				if fileSize > analytics.largestFileSize {
-					analytics.largestFileSize = fileSize
-					analytics.largestFile = d.Name()
-				}
-
-				// Move the file to the new path
-				err = os.Rename(path, newPath)
-				if err != nil {
-					return fmt.Errorf("failed to move file %s to %s: %v", path, newPath, err)
-				}
-				// fmt.Printf("Moved %s to %s\n", path, newPath)
-			}
+			processFile(path, d, folderPath, &analytics)
 		}
 		return nil
 	})
 
+	// Handle errors during traversal
 	if err != nil {
 		log.Println("Error:", err)
 	}
 
 	// Delete empty folders
-	err = filepath.WalkDir(folderPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() && path != folderPath {
-			// Check if the directory is empty
-			entries, err := os.ReadDir(path)
-			if err != nil {
-				return err
-			}
-			if len(entries) == 0 {
-				err := os.Remove(path)
-				if err != nil {
-					return fmt.Errorf("failed to remove empty directory %s: %v", path, err)
-				}
-				analytics.totalEmptyFolders++
-				fmt.Printf("Deleted empty folder: %s\n", path)
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Println("Error:", err)
-	}
+	deleteEmptyFolders(folderPath, &analytics)
 
 	// Print analytics summary
-	fmt.Println("\n--- Analytics Summary ---")
-	fmt.Printf("Total files moved: %d\n", analytics.totalFilesMoved)
-	fmt.Printf("Total size moved: %.2f MB\n", float64(analytics.totalSizeMoved)/(1024*1024))
-	fmt.Printf("Largest file: %s (%.2f MB)\n", analytics.largestFile, float64(analytics.largestFileSize)/(1024*1024))
-	fmt.Printf("Total empty folders removed: %d\n", analytics.totalEmptyFolders)
-	fmt.Printf("Folders sorted: %d\n", analytics.sortedFolders)
-	fmt.Printf("Folders skipped: %d\n", analytics.skippedFolders)
-
-	fmt.Println("\nFiles moved by category:")
-	for category, stats := range analytics.categoryStats {
-		fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.count, float64(stats.size)/(1024*1024))
-	}
+	printAnalytics(analytics)
 }
