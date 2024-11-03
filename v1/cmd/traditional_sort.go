@@ -16,10 +16,10 @@ func TraditionalSorting(folderPath string, analytics *analytics.Analytics) {
 		}
 		if d.IsDir() && path != folderPath {
 			if !utils.Confirm(fmt.Sprintf("Do you want to sort files in the folder: %s?", path)) {
-				analytics.SkippedFolders++
+				analytics.IncreaseSkippedFolders()
 				return filepath.SkipDir
 			}
-			analytics.SortedFolders++
+			analytics.IncreaseSortedFolders()
 		}
 		if !d.IsDir() {
 			utils.ProcessFile(path, d, folderPath, analytics)

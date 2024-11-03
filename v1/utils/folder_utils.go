@@ -23,7 +23,7 @@ func DeleteEmptyFolders(folderPath string, analytics *analytics.Analytics) {
 				if err := os.Remove(path); err != nil {
 					log.Printf("Failed to remove empty directory %s: %v\n", path, err)
 				} else {
-					analytics.TotalEmptyFolders++
+					analytics.IncreaseTotalEmptyFolders()
 					fmt.Printf("Deleted empty folder: %s\n", path)
 				}
 			}

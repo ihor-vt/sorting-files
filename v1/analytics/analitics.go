@@ -3,51 +3,63 @@ package analytics
 import "fmt"
 
 type Analytics struct {
-	TotalFilesMoved   int
-	TotalSizeMoved    int64
-	TotalEmptyFolders int
-	SortedFolders     int
-	SkippedFolders    int
-	CategoryStats     map[string]Category
-	LargestFile       string
-	LargestFileSize   int64
+	totalFilesMoved   int
+	totalSizeMoved    int64
+	totalEmptyFolders int
+	sortedFolders     int
+	skippedFolders    int
+	categoryStats     map[string]Category
+	largestFile       string
+	largestFileSize   int64
 }
 
 type Category struct {
-	Count int
-	Size  int64
+	count int
+	size  int64
 }
 
 func NewAnalytics() *Analytics {
-	return &Analytics{CategoryStats: make(map[string]Category)}
+	return &Analytics{categoryStats: make(map[string]Category)}
+}
+
+func (a *Analytics) IncreaseSkippedFolders() {
+	a.skippedFolders++
+}
+
+func (a *Analytics) IncreaseSortedFolders() {
+	a.sortedFolders++
+}
+
+func (a *Analytics) IncreaseTotalEmptyFolders() {
+	a.totalEmptyFolders++
 }
 
 func (a *Analytics) UpdateAnalytics(category string, fileSize int64, fileName string) {
-	a.TotalFilesMoved++
-	a.TotalSizeMoved += fileSize
+	a.totalFilesMoved++
+	a.totalSizeMoved += fileSize
 
-	catStats := a.CategoryStats[category]
-	catStats.Count++
-	catStats.Size += fileSize
-	a.CategoryStats[category] = catStats
+	catStats := a.categoryStats[category]
+	catStats.count++
+	catStats.size += fileSize
+	a.categoryStats[category] = catStats
 
-	if fileSize > a.LargestFileSize {
-		a.LargestFileSize = fileSize
-		a.LargestFile = fileName
+	if fileSize > a.largestFileSize {
+		a.largestFileSize = fileSize
+		a.largestFile = fileName
 	}
 }
 
 func (a *Analytics) PrintSummary() {
 	fmt.Println("\n--- Analytics Summary ---")
-	fmt.Printf("Total files moved: %d\n", a.TotalFilesMoved)
-	fmt.Printf("Total size moved: %.2f MB\n", float64(a.TotalSizeMoved)/(1024*1024))
-	fmt.Printf("Largest file: %s (%.2f MB)\n", a.LargestFile, float64(a.LargestFileSize)/(1024*1024))
-	fmt.Printf("Total empty folders removed: %d\n", a.TotalEmptyFolders)
-	fmt.Printf("Folders sorted: %d\n", a.SortedFolders)
-	fmt.Printf("Folders skipped: %d\n", a.SkippedFolders)
+	fmt.Printf("Total files moved: %d\n", a.totalFilesMoved)
+	fmt.Printf("Total size moved: %.2f MB\n", float64(a.totalSizeMoved)/(1024*1024))
+	fmt.Printf("Largest file: %s (%.2f MB)\n", a.largestFile, float64(a.largestFileSize)/(1024*1024))
+	fmt.Printf("Total empty folders removed: %d\n", a.totalEmptyFolders)
+	fmt.Printf("Folders sorted: %d\n", a.sortedFolders)
+	fmt.Printf("Folders skipped: %d\n", a.skippedFolders)
 
 	fmt.Println("\nFiles moved by category:")
-	for category, stats := range a.CategoryStats {
-		fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.Count, float64(stats.Size)/(1024*1024))
+	for category, stats := range a.categoryStats {
+		fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.count, float64(stats.size)/(1024*1024))
 	}
 }
