@@ -58,8 +58,10 @@ func (a *Analytics) PrintSummary() {
 	fmt.Printf("Folders sorted: %d\n", a.sortedFolders)
 	fmt.Printf("Folders skipped: %d\n", a.skippedFolders)
 
-	fmt.Println("\nFiles moved by category:")
-	for category, stats := range a.categoryStats {
-		fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.count, float64(stats.size)/(1024*1024))
+	if len(a.categoryStats) > 0 {
+		fmt.Println("\nFiles moved by category:")
+		for category, stats := range a.categoryStats {
+			fmt.Printf("- %s: %d files, %.2f MB\n", category, stats.count, float64(stats.size)/(1024*1024))
+		}
 	}
 }
