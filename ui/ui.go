@@ -58,7 +58,7 @@ func (m Model) View() string {
 		return "Thanks for using File Sorter Pro!"
 	}
 
-	s := "Welcome to File Sorter Pro!\n\n"
+	s := "Welcome to Sortastic AI!\n\n"
 	s += "An innovative file sorting solution for both traditional and AI-based sorting.\n\n"
 	s += "Select an option:\n\n"
 

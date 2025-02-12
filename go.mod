@@ -1,6 +1,6 @@
 module v1
 
-go 1.23.2
+go 1.23.3
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
